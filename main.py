@@ -38,6 +38,8 @@ parser.add_argument('--mr-milestones', default=[30, 80, 120],  type=int, nargs='
 parser.add_argument('--mixup', default=0,  type=float, help='parameter for generating mixup examples')
 parser.add_argument('--label-smoothing',action='store_true', help='smooth label')
 parser.add_argument('--mid-update',action='store_true', help='upadate weighting in the middle of epochs')
+parser.add_argument('--max_weight', default=1., type=float, help='maximal weight of each example')
+
 
 parser.add_argument('--print-freq', default=10, type=int, help='print frequency') # TODO: fix this
 
@@ -242,6 +244,16 @@ def train_mr(eta):
             eta *= args.gamma_mr
 
         total_loss, weighting = update_total_loss_weighting(curr_loss, total_loss, eta)
+        if args.max_weight < 1.:
+            actual_max_weight = 1/(args.max_weight*n_samples)
+            while weighting.max() > actual_max_weight:
+                res = torch.clamp(weighting - actual_max_weight, min=0.).sum()
+                normalized_low = weighting[weighting < actual_max_weight] / weighting[weighting < actual_max_weight].sum()
+                weighting[weighting < actual_max_weight] = weighting[weighting < actual_max_weight] \
+                                                               + normalized_low * res
+                weighting[weighting > actual_max_weight] = actual_max_weight
+                print('in loop normalizing weights')
+                print(f'max weight * N: {weighting.max()*n_samples}, min: {weighting.min()*n_samples}')
 
         noisy_loss.append(curr_loss[noisy_i].mean().item())
         curr_clean_loss = (curr_loss.sum() - curr_loss[noisy_i].sum()) / \
@@ -326,6 +338,17 @@ def train_mr_mixup(eta):
             eta *= args.gamma_mr
 
         total_loss, weighting = update_total_loss_weighting(curr_loss, total_loss, eta)
+        if args.max_weight < 1.:
+            actual_max_weight = 1/(args.max_weight*n_samples)
+            while weighting.max() > actual_max_weight:
+                res = torch.clamp(weighting - actual_max_weight, min=0.).sum()
+                normalized_low = weighting[weighting < actual_max_weight] / weighting[weighting < actual_max_weight].sum()
+                weighting[weighting < actual_max_weight] = weighting[weighting < actual_max_weight] \
+                                                               + normalized_low * res
+                weighting[weighting > actual_max_weight] = actual_max_weight
+                print('in loop normalizing weights')
+                print(f'max weight * N: {weighting.max()*n_samples}, min: {weighting.min()*n_samples}')
+
 
         noisy_loss.append(curr_loss[noisy_i].mean().item())
         curr_clean_loss = (curr_loss.sum() - curr_loss[noisy_i].sum()) / \
